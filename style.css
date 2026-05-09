@@ -1,0 +1,125 @@
+body{
+  background-color: #000000;
+  margin: 0px;
+  padding: 0;
+  overflow: hidden;
+  font-family: 'Arial', sans-serif;
+}
+
+canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+}
+
+a{
+  color:#ffffff;
+}
+
+.hud {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 100;
+  display: flex;
+  gap: 20px;
+}
+
+.hud-item {
+  background: rgba(0, 0, 0, 0.7);
+  padding: 12px 20px;
+  border: 2px solid #00ffff;
+  border-radius: 10px;
+  box-shadow: 0 0 10px #00ffff, inset 0 0 10px rgba(0, 255, 255, 0.1);
+}
+
+.hud-item .label {
+  display: block;
+  color: #00ffff;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.hud-item .value {
+  display: block;
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: bold;
+  text-shadow: 0 0 10px #00ffff;
+}
+
+.status{
+  position: absolute;
+  width: 400px;
+  height: auto;
+  z-index: 200;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(0, 0, 0, 0.9);
+  text-align: center;
+  padding: 30px;
+  border: 3px solid #ff00ff;
+  border-radius: 20px;
+  box-shadow: 0 0 30px #ff00ff, inset 0 0 30px rgba(255, 0, 255, 0.1);
+  display: none;
+  color: #ffffff;
+}
+
+.status h2 {
+  font-size: 36px;
+  margin: 0 0 20px 0;
+  text-shadow: 0 0 20px #ff00ff;
+}
+
+.status h3 {
+  font-size: 18px;
+  margin: 20px 0 0 0;
+  color: #00ffff;
+  text-shadow: 0 0 10px #00ffff;
+  animation: pulse 1.5s infinite;
+}
+
+.neon-title {
+  font-size: 48px !important;
+  color: #00ffff;
+  text-shadow: 0 0 10px #00ffff, 0 0 20px #00ffff, 0 0 30px #00ffff;
+}
+
+.controls {
+  margin: 20px 0;
+}
+
+.controls p {
+  margin: 10px 0;
+  font-size: 16px;
+}
+
+.key {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 5px 12px;
+  border: 1px solid #00ffff;
+  border-radius: 5px;
+  color: #00ffff;
+  font-weight: bold;
+  margin: 0 2px;
+}
+
+.game-stats {
+  margin: 20px 0;
+}
+
+.game-stats .stat {
+  font-size: 20px;
+  margin: 10px 0;
+  color: #00ff00;
+  text-shadow: 0 0 10px #00ff00;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}

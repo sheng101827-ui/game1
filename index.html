@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>太空射击 - Space Hack</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+</head>
+<body>
+  <div class="hud">
+    <div class="hud-item">
+      <span class="label">生命值</span>
+      <span class="value" id="lives">3</span>
+    </div>
+    <div class="hud-item">
+      <span class="label">击杀数</span>
+      <span class="value" id="kills">0</span>
+    </div>
+    <div class="hud-item">
+      <span class="label">子弹数</span>
+      <span class="value" id="bullets">0</span>
+    </div>
+  </div>
+  
+  <div class="status" id="status">
+    <h2>你被击毁了</h2>
+    <p>按 空格键 继续</p>
+  </div>
+  
+  <div class="status" id="GameOver">
+    <h2>游戏结束</h2>
+    <div class="game-stats">
+      <p class="stat">击杀数: <span id="FinalKills">0</span></p>
+      <p class="stat">发射子弹: <span id="FinalBullets">0</span></p>
+    </div>
+    <h3>按 空格键 重新开始</h3>
+  </div>
+  
+  <div class="status" id="Start">
+    <h2 class="neon-title">太空射击</h2>
+    <div class="controls">
+      <p>使用 <span class="key">W A S D</span> 移动飞船</p>
+      <p>按 <span class="key">Enter</span> 射击</p>
+      <p>按 <span class="key">F</span> 全屏显示</p>
+    </div>
+    <h3>按 空格键 开始游戏</h3>
+  </div>
+  
+  <script src="script.js"></script>
+</body>
+</html>
