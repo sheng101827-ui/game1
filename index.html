@@ -1,0 +1,768 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Space battle</title>
+  <style>
+* {
+  margin: 0;
+  padding: 0;
+}
+body {
+  background: #111;
+  overflow: hidden;
+}
+canvas {
+  position: absolute;
+  margin: 0 auto;
+  display: block;
+  border-left: 0;
+  border-right: 0;
+}
+  </style>
+</head>
+<body>
+<canvas id="mainCanvas"></canvas>
+  <script>
+// https://twitter.com/msvaljek
+// https://msvaljek.blogspot.com/2013/08/canvas-space-battle.html
+
+/* 
+  space battle with Phasers and tactical warp jumps
+  sort of Star Trek inspired :)
+  
+*/
+
+// standard shim
+window.requestAnimFrame = (function(){
+	return window.requestAnimationFrame ||
+	window.webkitRequestAnimationFrame ||
+	window.mozRequestAnimationFrame ||
+	function( callback ) {
+		window.setTimeout(callback, 1000 / 60);
+	};
+})();
+
+// helper functions
+function randomMax(max) {
+	return ~~(Math.random() * max);
+}
+
+var canvas = document.getElementById('mainCanvas');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+var ctx = canvas.getContext('2d');
+
+// globals
+var twoPi = 2 * Math.PI,
+	numShips = 150,
+	shipTypes = [],
+	shipSize = 5,
+	trailLineWidth = 2,
+	fireTrailWidth = 3,
+	weaponPrecisionFactor = 6;
+
+// 增加更多飞船颜色和属性变种 - 增强颜色和大小差异
+shipTypes.push({
+	name: '联邦巡洋舰',
+	color : '#E8F4FF',
+	shipShape: 'circle',
+	shipScale: 1.0,
+	warpTrailColor : 'rgba(100, 180, 255, 0.8)',
+	engineTrailColor: 'rgba(100, 200, 255, 0.8)',
+	trailLife : 35,
+	impulseSpeedMax : 3.5,
+	newDirectionCycle : 35,
+	warpCycleMin : 400,
+	warpCycleVar : 800,
+	range : 45,
+	fireColor : 'rgba(255, 230, 100, 1)',
+	fireRecharge : 35,
+	fireDischarge : 12,
+	damage: 15,
+	health: 100,
+	shield: 50
+});
+
+shipTypes.push({
+	name: '克林贡战舰',
+	color : '#00FF40',
+	shipShape: 'triangle',
+	shipScale: 1.2,
+	warpTrailColor : 'rgba(0, 255, 100, 0.8)',
+	engineTrailColor: 'rgba(100, 255, 100, 0.8)',
+	trailLife : 45,
+	impulseSpeedMax : 2.8,
+	newDirectionCycle : 40,
+	warpCycleMin : 500,
+	warpCycleVar : 900,
+	range : 50,
+	fireColor : 'rgba(0, 255, 150, 1)',
+	fireRecharge : 45,
+	fireDischarge : 18,
+	damage: 20,
+	health: 120,
+	shield: 40
+});
+
+shipTypes.push({
+	name: '罗慕兰战鸟',
+	color : '#00E5FF',
+	shipShape: 'diamond',
+	shipScale: 1.1,
+	warpTrailColor : 'rgba(0, 220, 255, 0.8)',
+	engineTrailColor: 'rgba(0, 200, 255, 0.8)',
+	trailLife : 40,
+	impulseSpeedMax : 3.2,
+	newDirectionCycle : 38,
+	warpCycleMin : 600,
+	warpCycleVar : 850,
+	range : 55,
+	fireColor : 'rgba(100, 255, 255, 1)',
+	fireRecharge : 40,
+	fireDischarge : 14,
+	damage: 18,
+	health: 110,
+	shield: 60
+});
+
+shipTypes.push({
+	name: '博格方块',
+	color : '#FF4400',
+	shipShape: 'square',
+	shipScale: 1.5,
+	warpTrailColor : 'rgba(255, 100, 0, 0.9)',
+	engineTrailColor: 'rgba(255, 150, 50, 0.8)',
+	trailLife : 55,
+	impulseSpeedMax : 2.0,
+	newDirectionCycle : 50,
+	warpCycleMin : 700,
+	warpCycleVar : 1000,
+	range : 65,
+	fireColor : 'rgba(255, 150, 0, 1)',
+	fireRecharge : 55,
+	fireDischarge : 25,
+	damage: 30,
+	health: 150,
+	shield: 80
+});
+
+shipTypes.push({
+	name: '卡达西战舰',
+	color : '#FF00FF',
+	shipShape: 'star',
+	shipScale: 0.9,
+	warpTrailColor : 'rgba(255, 50, 255, 0.8)',
+	engineTrailColor: 'rgba(255, 100, 255, 0.8)',
+	trailLife : 38,
+	impulseSpeedMax : 3.8,
+	newDirectionCycle : 32,
+	warpCycleMin : 350,
+	warpCycleVar : 700,
+	range : 40,
+	fireColor : 'rgba(255, 100, 255, 1)',
+	fireRecharge : 30,
+	fireDischarge : 10,
+	damage: 14,
+	health: 90,
+	shield: 45
+});
+
+// 子弹类
+var Bullet = function(x, y, targetX, targetY, color, damage) {
+	this.x = x;
+	this.y = y;
+	this.color = color;
+	this.damage = damage;
+	
+	var angle = Math.atan2(targetY - y, targetX - x);
+	this.speed = 12;
+	this.dx = Math.cos(angle) * this.speed;
+	this.dy = Math.sin(angle) * this.speed;
+	
+	this.life = 60;
+	this.trail = [];
+};
+Bullet.prototype.update = function() {
+	// 保存轨迹
+	this.trail.push({x: this.x, y: this.y, life: 10});
+	if (this.trail.length > 10) {
+		this.trail.shift();
+	}
+	
+	// 更新轨迹生命
+	this.trail.forEach(function(t) {
+		t.life--;
+	});
+	this.trail = this.trail.filter(function(t) {
+		return t.life > 0;
+	});
+	
+	this.x += this.dx;
+	this.y += this.dy;
+	this.life--;
+	
+	return this.life > 0 && 
+		   this.x > 0 && this.x < canvas.width &&
+		   this.y > 0 && this.y < canvas.height;
+};
+Bullet.prototype.draw = function() {
+	// 绘制子弹轨迹
+	this.trail.forEach(function(t, i) {
+		var alpha = t.life / 10;
+		ctx.beginPath();
+		ctx.fillStyle = this.color.replace(/[\d.]+\)$/, alpha + ')');
+		ctx.arc(t.x, t.y, 2, 0, twoPi);
+		ctx.fill();
+	}, this);
+	
+	// 绘制子弹本体
+	ctx.beginPath();
+	ctx.fillStyle = this.color;
+	ctx.arc(this.x, this.y, 4, 0, twoPi);
+	ctx.fill();
+	
+	// 子弹光晕
+	ctx.beginPath();
+	var gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, 8);
+	gradient.addColorStop(0, this.color);
+	gradient.addColorStop(1, 'transparent');
+	ctx.fillStyle = gradient;
+	ctx.arc(this.x, this.y, 8, 0, twoPi);
+	ctx.fill();
+};
+Bullet.prototype.checkHit = function(ships) {
+	for (var i = 0; i < ships.length; i++) {
+		var ship = ships[i];
+		var dist = Math.sqrt(Math.pow(ship.x - this.x, 2) + Math.pow(ship.y - this.y, 2));
+		if (dist < ship.size + 5) {
+			return i;
+		}
+	}
+	return -1;
+};
+
+// 移动尾迹类
+var EngineTrail = function(x, y, color, life) {
+	this.x = x;
+	this.y = y;
+	this.color = color;
+	this.life = life;
+	this.maxLife = life;
+	this.size = 3;
+};
+EngineTrail.prototype.update = function() {
+	this.life--;
+	this.size = 3 * (this.life / this.maxLife);
+	return this.life > 0;
+};
+EngineTrail.prototype.draw = function() {
+	var alpha = this.life / this.maxLife;
+	ctx.beginPath();
+	ctx.fillStyle = this.color.replace(/[\d.]+\)$/, alpha + ')');
+	ctx.arc(this.x, this.y, this.size, 0, twoPi);
+	ctx.fill();
+};
+
+// 跳跃特效粒子
+var WarpParticle = function(x, y, color) {
+	this.x = x;
+	this.y = y;
+	this.color = color;
+	this.angle = Math.random() * twoPi;
+	this.speed = 2 + Math.random() * 4;
+	this.dx = Math.cos(this.angle) * this.speed;
+	this.dy = Math.sin(this.angle) * this.speed;
+	this.life = 30 + Math.random() * 20;
+	this.maxLife = this.life;
+	this.size = 2 + Math.random() * 3;
+};
+WarpParticle.prototype.update = function() {
+	this.x += this.dx;
+	this.y += this.dy;
+	this.dx *= 0.95;
+	this.dy *= 0.95;
+	this.life--;
+	return this.life > 0;
+};
+WarpParticle.prototype.draw = function() {
+	var alpha = this.life / this.maxLife;
+	ctx.beginPath();
+	ctx.fillStyle = this.color.replace(/[\d.]+\)$/, alpha + ')');
+	ctx.arc(this.x, this.y, this.size * (this.life / this.maxLife), 0, twoPi);
+	ctx.fill();
+};
+
+// 原有的跳跃轨迹
+var Trail = function (x1, y1, x2, y2, color, trailTime) {
+	this.x2 = x2;
+	this.y2 = y2;
+
+	this.x1 = x1;
+	this.y1 = y1;
+
+	this.color = color;
+
+	var dy = (y2 - y1);
+	var dx = (x2 - x1);
+	this.angle = Math.atan2(dy, dx);
+
+	var trailLifedelta = (Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2)) / trailTime);
+	this.dx =  trailLifedelta * Math.cos(this.angle);
+	this.dy = trailLifedelta * Math.sin(this.angle);
+
+	this.next = undefined;
+	this.previous = undefined;
+};
+Trail.prototype.draw = function () {
+
+	this.x1 += this.dx;
+	this.y1 += this.dy;
+
+	ctx.strokeStyle = this.color;
+	ctx.lineWidth = trailLineWidth;
+	ctx.beginPath();
+	var trailWidth = ~~(shipSize / 2);
+	ctx.moveTo(this.x1 - trailWidth , this.y1 - trailWidth);
+	ctx.lineTo(this.x2 - trailWidth, this.y2 - trailWidth);
+	ctx.moveTo(this.x1 + trailWidth , this.y1 + trailWidth);
+	ctx.lineTo(this.x2 + trailWidth, this.y2 + trailWidth);
+	ctx.stroke();
+
+	var dy = (this.y2 - this.y1);
+	var dx = (this.x2 - this.x1);
+
+	var distance = Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2));
+
+	if (distance < 3) {
+		this.next = null;
+		if (this.previous) {
+			this.previous.next = this.next;
+		} else {
+			trails.head = null;
+		}
+	}
+};
+
+var Trails = function () {
+	this.head = null;
+};
+Trails.prototype.add = function (x1, y1, x2, y2, color, trailTime) {
+
+	var newTrail = new Trail(x1, y1, x2, y2, color, trailTime);
+
+	if (this.head === null) {
+		this.head = newTrail;
+	} else {
+		this.head.previous = newTrail;
+		newTrail.next = this.head;
+		this.head = newTrail;
+	}
+};
+Trails.prototype.draw = function () {
+	var p = this.head;
+	while (p) {
+		p.draw();
+		p = p.next;
+	}
+};
+
+var trails = new Trails();
+var bullets = [];
+var engineTrails = [];
+var warpParticles = [];
+
+// 爆炸效果
+var Explosion = function(x, y, color) {
+	this.particles = [];
+	for (var i = 0; i < 20; i++) {
+		var angle = (i / 20) * twoPi;
+		var speed = 2 + Math.random() * 4;
+		this.particles.push({
+			x: x,
+			y: y,
+			dx: Math.cos(angle) * speed,
+			dy: Math.sin(angle) * speed,
+			life: 30 + Math.random() * 20,
+			maxLife: 50,
+			size: 2 + Math.random() * 4,
+			color: color
+		});
+	}
+};
+Explosion.prototype.update = function() {
+	this.particles.forEach(function(p) {
+		p.x += p.dx;
+		p.y += p.dy;
+		p.dx *= 0.98;
+		p.dy *= 0.98;
+		p.life--;
+	});
+	this.particles = this.particles.filter(function(p) {
+		return p.life > 0;
+	});
+	return this.particles.length > 0;
+};
+Explosion.prototype.draw = function() {
+	this.particles.forEach(function(p) {
+		var alpha = p.life / p.maxLife;
+		ctx.beginPath();
+		ctx.fillStyle = p.color.replace(/[\d.]+\)$/, alpha + ')');
+		ctx.arc(p.x, p.y, p.size * (p.life / p.maxLife), 0, twoPi);
+		ctx.fill();
+	});
+};
+
+var explosions = [];
+
+// 绘制不同形状的飞船
+function drawShipShape(x, y, size, shape, color) {
+	ctx.beginPath();
+	ctx.fillStyle = color;
+	
+	switch(shape) {
+		case 'circle':
+			ctx.arc(x, y, size, 0, twoPi);
+			break;
+		case 'triangle':
+			ctx.moveTo(x, y - size);
+			ctx.lineTo(x + size * 0.866, y + size * 0.5);
+			ctx.lineTo(x - size * 0.866, y + size * 0.5);
+			ctx.closePath();
+			break;
+		case 'diamond':
+			ctx.moveTo(x, y - size);
+			ctx.lineTo(x + size * 0.7, y);
+			ctx.lineTo(x, y + size);
+			ctx.lineTo(x - size * 0.7, y);
+			ctx.closePath();
+			break;
+		case 'square':
+			ctx.rect(x - size * 0.8, y - size * 0.8, size * 1.6, size * 1.6);
+			break;
+		case 'star':
+			for (var i = 0; i < 5; i++) {
+				var angle = (i * 4 * Math.PI / 5) - Math.PI / 2;
+				var px = x + Math.cos(angle) * size;
+				var py = y + Math.sin(angle) * size;
+				if (i === 0) ctx.moveTo(px, py);
+				else ctx.lineTo(px, py);
+			}
+			ctx.closePath();
+			break;
+		default:
+			ctx.arc(x, y, size, 0, twoPi);
+	}
+	ctx.fill();
+}
+
+var Ship = function () {
+	this.x = ~~(Math.random() * canvas.width);
+	this.y = ~~(Math.random() * canvas.height);
+
+	this.pickNewDirection();
+	this.shipClass = ~~(Math.random() * shipTypes.length);
+
+	var shipType = shipTypes[this.shipClass];
+
+	this.name = shipType.name;
+	this.color = shipType.color;
+	this.shipShape = shipType.shipShape;
+	this.shipScale = shipType.shipScale;
+	this.warpTrailColor = shipType.warpTrailColor;
+	this.engineTrailColor = shipType.engineTrailColor;
+	this.trailLife = shipType.trailLife;
+
+	this.size = shipSize * this.shipScale;
+	this.newDirectionCounter = 1;
+	this.newDirectionCycle = shipType.newDirectionCycle;
+	this.impulseSpeedMax = shipType.impulseSpeedMax;
+
+	this.warpCycleCounter = 1;
+	this.warpCycle = shipType.warpCycleMin + (~~(Math.random() * shipType.warpCycleVar));
+	this.isWarping = false;
+	this.warpAnimationFrame = 0;
+
+	this.range = shipType.range;
+	this.fireColor = shipType.fireColor;
+	this.fireRecharge = shipType.fireRecharge;
+	this.fireCounter = 0;
+	this.fireDischarge = shipType.fireDischarge;
+	this.fireDischargeCounter = 0;
+	this.target = null;
+	this.weaponOffsetx = ~~(weaponPrecisionFactor * (Math.random() - 0.5));
+	this.weaponOffsety = ~~(weaponPrecisionFactor * (Math.random() - 0.5));
+	
+	this.health = shipType.health;
+	this.maxHealth = shipType.health;
+	this.shield = shipType.shield;
+	this.maxShield = shipType.shield;
+	this.damage = shipType.damage;
+};
+Ship.prototype.draw = function (index) {
+
+	this.newDirectionCounter = (this.newDirectionCounter + 1) % this.newDirectionCycle;
+
+	if (this.newDirectionCounter === 0) {
+		this.pickNewDirection();
+	}
+
+	// 添加移动尾迹
+	if (Math.abs(this.dx) > 0.5 || Math.abs(this.dy) > 0.5) {
+		var engineX = this.x - this.dx * 2;
+		var engineY = this.y - this.dy * 2;
+		engineTrails.push(new EngineTrail(engineX, engineY, this.engineTrailColor, 15));
+	}
+
+	this.x += this.dx;
+	this.y += this.dy;
+
+	if (this.x <= 0) {
+		this.x = 0;
+		this.pickNewDirection();
+	}
+	if (this.x >= canvas.width) {
+		this.x = canvas.width;
+		this.pickNewDirection();
+	}
+	if (this.y <= 0) {
+		this.y = 0;
+		this.pickNewDirection();
+	}
+	if (this.y >= canvas.height) {
+		this.y = canvas.height;
+		this.pickNewDirection();
+	}
+
+	this.warpCycleCounter = (this.warpCycleCounter + 1) % this.warpCycle;
+
+	if (this.warpCycleCounter === 0) {
+		this.startWarp();
+	}
+	
+	// 跳跃动画
+	if (this.isWarping) {
+		this.warpAnimationFrame++;
+		if (this.warpAnimationFrame > 30) {
+			this.isWarping = false;
+			this.warpAnimationFrame = 0;
+		}
+	}
+
+	// 护盾效果
+	if (this.shield > 0) {
+		ctx.beginPath();
+		var shieldGradient = ctx.createRadialGradient(this.x, this.y, this.size, this.x, this.y, this.size + 8);
+		shieldGradient.addColorStop(0, 'rgba(100, 200, 255, 0.1)');
+		shieldGradient.addColorStop(0.7, 'rgba(100, 200, 255, 0.3)');
+		shieldGradient.addColorStop(1, 'transparent');
+		ctx.fillStyle = shieldGradient;
+		ctx.arc(this.x, this.y, this.size + 8, 0, twoPi);
+		ctx.fill();
+	}
+
+	// 飞船发光效果（底层）
+	ctx.beginPath();
+	var glowGradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size + 8);
+	glowGradient.addColorStop(0, this.color);
+	glowGradient.addColorStop(1, 'transparent');
+	ctx.fillStyle = glowGradient;
+	ctx.arc(this.x, this.y, this.size + 8, 0, twoPi);
+	ctx.fill();
+
+	// 飞船主体（使用不同形状）
+	drawShipShape(this.x, this.y, this.size, this.shipShape, this.color);
+	
+	// 飞船内部高光
+	ctx.beginPath();
+	ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+	ctx.arc(this.x - this.size * 0.3, this.y - this.size * 0.3, this.size * 0.3, 0, twoPi);
+	ctx.fill();
+
+	// 跳跃动画效果
+	if (this.isWarping) {
+		var warpScale = 1 + Math.sin(this.warpAnimationFrame * 0.5) * 0.5;
+		ctx.beginPath();
+		ctx.strokeStyle = this.warpTrailColor.replace('0.7', '0.9');
+		ctx.lineWidth = 3;
+		ctx.arc(this.x, this.y, this.size * warpScale + 10, 0, twoPi);
+		ctx.stroke();
+	}
+
+	// 血条
+	if (this.health < this.maxHealth) {
+		var barWidth = 20;
+		var barHeight = 3;
+		var barX = this.x - barWidth / 2;
+		var barY = this.y - this.size - 10;
+		
+		ctx.fillStyle = '#333';
+		ctx.fillRect(barX, barY, barWidth, barHeight);
+		ctx.fillStyle = '#ff4444';
+		ctx.fillRect(barX, barY, barWidth * (this.health / this.maxHealth), barHeight);
+	}
+
+	if (this.fireCounter > 0) {
+		this.fireCounter--;
+	} else {
+		// find first enemy in the range and shoot at it
+		for (var k = 0; k < ships.length; k++) {
+			if (ships[k].shipClass !== this.shipClass) {
+				var distance = Math.sqrt(Math.pow(ships[k].x - this.x, 2) + Math.pow(ships[k].y - this.y, 2));
+				if (distance < this.range) {
+					this.target = ships[k];
+					this.fireCounter = this.fireRecharge;
+					this.fireDischargeCounter = this.fireDischarge;
+
+					break;
+				}
+			}
+		}
+	}
+
+	if (this.fireDischargeCounter > 0 && this.target) {
+		this.fireDischargeCounter--;
+
+		ctx.lineWidth = fireTrailWidth;
+
+		var firedistance = Math.sqrt(Math.pow(this.target.x - this.x, 2) + Math.pow(this.target.y - this.y, 2));
+		if (firedistance < this.range) {
+			// 发射子弹
+			if (this.fireDischargeCounter % 3 === 0) {
+				bullets.push(new Bullet(
+					this.x, 
+					this.y, 
+					this.target.x + this.weaponOffsetx, 
+					this.target.y + this.weaponOffsety, 
+					this.fireColor,
+					this.damage
+				));
+			}
+		}
+	} else {
+		this.target = null;
+	}
+};
+Ship.prototype.startWarp = function() {
+	var oldx = this.x;
+	var oldy = this.y;
+
+	// 在起点添加跳跃粒子效果
+	for (var i = 0; i < 30; i++) {
+		warpParticles.push(new WarpParticle(oldx, oldy, this.warpTrailColor));
+	}
+
+	this.x = Math.random() * canvas.width;
+	this.y = Math.random() * canvas.height;
+
+	// 在终点添加跳跃粒子效果
+	for (var i = 0; i < 30; i++) {
+		warpParticles.push(new WarpParticle(this.x, this.y, this.warpTrailColor));
+	}
+
+	trails.add(oldx, oldy, this.x, this.y, this.warpTrailColor, this.trailLife);
+	// stop the ship after warp
+	this.dx = 0;
+	this.dy = 0;
+	this.isWarping = true;
+	this.warpAnimationFrame = 0;
+};
+Ship.prototype.pickNewDirection = function () {
+	this.dx = ~~((0.5 - Math.random()) * 2 * this.impulseSpeedMax);
+	this.dy = ~~((0.5 - Math.random()) * 2 * this.impulseSpeedMax);
+};
+Ship.prototype.takeDamage = function(damage) {
+	if (this.shield > 0) {
+		this.shield -= damage;
+		if (this.shield < 0) {
+			this.health += this.shield;
+			this.shield = 0;
+		}
+	} else {
+		this.health -= damage;
+	}
+};
+
+var ships = [];
+
+for (var i = 0; i < numShips; i++) {
+	ships.push(new Ship());
+}
+
+window.onresize = function() {
+	canvas.width = window.innerWidth;
+	canvas.height = window.innerHeight;
+};
+
+(function animloop(){
+	requestAnimFrame(animloop);
+
+	ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+	// 绘制星空背景
+	ctx.fillStyle = '#0a0a1a';
+	ctx.fillRect(0, 0, canvas.width, canvas.height);
+	
+	// 绘制星星
+	for (var i = 0; i < 100; i++) {
+		var starX = (i * 137.5) % canvas.width;
+		var starY = (i * 89.3) % canvas.height;
+		var starSize = (i % 3) * 0.5 + 0.5;
+		ctx.beginPath();
+		ctx.fillStyle = 'rgba(255, 255, 255, ' + (0.3 + (i % 5) * 0.1) + ')';
+		ctx.arc(starX, starY, starSize, 0, twoPi);
+		ctx.fill();
+	}
+
+	// 更新和绘制移动尾迹
+	engineTrails = engineTrails.filter(function(trail) {
+		trail.draw();
+		return trail.update();
+	});
+
+	// 更新和绘制跳跃粒子
+	warpParticles = warpParticles.filter(function(particle) {
+		particle.draw();
+		return particle.update();
+	});
+
+	trails.draw();
+	
+	// 更新和绘制子弹
+	bullets = bullets.filter(function(bullet) {
+		bullet.draw();
+		var hitIndex = bullet.checkHit(ships);
+		if (hitIndex >= 0) {
+			ships[hitIndex].takeDamage(bullet.damage);
+			// 命中效果
+			for (var i = 0; i < 5; i++) {
+				warpParticles.push(new WarpParticle(bullet.x, bullet.y, bullet.color));
+			}
+			return false;
+		}
+		return bullet.update();
+	});
+	
+	// 更新和绘制爆炸
+	explosions = explosions.filter(function(exp) {
+		exp.draw();
+		return exp.update();
+	});
+
+	// 检查飞船死亡
+	ships = ships.filter(function(ship) {
+		if (ship.health <= 0) {
+			explosions.push(new Explosion(ship.x, ship.y, 'rgba(255, 150, 50, 1)'));
+			return false;
+		}
+		return true;
+	});
+
+	for (var i = 0; i < ships.length; i++) {
+		ships[i].draw(i);
+	}
+})();
+  </script>
+</body>
+</html>
